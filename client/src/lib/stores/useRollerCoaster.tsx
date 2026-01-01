@@ -130,7 +130,8 @@ export const useRollerCoaster = create<RollerCoasterState>((set, get) => ({
       }
       
       const loopRadius = 8;
-      const numPoints = 16; // More points for smoother curve
+      const numPoints = 20; // More points for smoother curve
+      const leadOut = 4; // Lead-out distance for smooth transition
       const loopPoints: TrackPoint[] = [];
       
       // Loop path using θ from 0 to 2π:
@@ -139,7 +140,7 @@ export const useRollerCoaster = create<RollerCoasterState>((set, get) => ({
       // 
       // Path: entry → forward to far side while rising → over top → back toward entry while descending → back at entry level
       
-      for (let i = 1; i < numPoints; i++) {
+      for (let i = 1; i <= numPoints; i++) {
         const t = i / numPoints;
         const theta = t * Math.PI * 2;
         
@@ -148,9 +149,13 @@ export const useRollerCoaster = create<RollerCoasterState>((set, get) => ({
         // (1-cos(θ)): 0→1→2→1→0 scaled by radius (height curve)
         const verticalOffset = (1 - Math.cos(theta)) * loopRadius;
         
-        const x = entryPos.x + forward.x * forwardOffset;
+        // Add gradual forward motion to prevent backtracking at end
+        // This spreads the loop slightly forward so exit is ahead of entry
+        const progressiveForward = t * leadOut;
+        
+        const x = entryPos.x + forward.x * (forwardOffset + progressiveForward);
         const y = entryPos.y + verticalOffset;
-        const z = entryPos.z + forward.z * forwardOffset;
+        const z = entryPos.z + forward.z * (forwardOffset + progressiveForward);
         
         loopPoints.push({
           id: `point-${++pointCounter}`,
