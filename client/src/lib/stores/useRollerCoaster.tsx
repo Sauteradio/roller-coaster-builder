@@ -198,29 +198,34 @@ export const useRollerCoaster = create<RollerCoasterState>((set, get) => ({
       // Hermite-style transition: respect both loop exit direction and legacy track direction
       const transitionPoints: TrackPoint[] = [];
       
-      if (nextPoint) {
-        const nextPos = nextPoint.position.clone();
+      // We need to skip the immediate next point and target the one after to avoid S-curves
+      const nextNextPoint = state.trackPoints[pointIndex + 2];
+      const targetPoint = nextNextPoint || nextPoint;
+      
+      if (targetPoint) {
+        const targetPos = targetPoint.position.clone();
         
         // Loop exit tangent: at θ=2π, tangent = forward
         const exitTangent = forward.clone();
         
-        // Legacy track incoming direction (from nextPoint toward the point after)
-        // If there's a point after nextPoint, use that to compute legacy direction
-        const nextNextPoint = state.trackPoints[pointIndex + 2];
+        // Legacy track direction (from target toward the point after it)
+        const pointAfterTarget = nextNextPoint 
+          ? state.trackPoints[pointIndex + 3]
+          : state.trackPoints[pointIndex + 2];
+        
         let legacyTangent: THREE.Vector3;
         
-        if (nextNextPoint) {
+        if (pointAfterTarget) {
           // Direction the legacy track is heading
-          legacyTangent = nextNextPoint.position.clone().sub(nextPos).normalize();
+          legacyTangent = pointAfterTarget.position.clone().sub(targetPos).normalize();
         } else {
-          // No point after, just use direction from loop exit to next point
-          legacyTangent = nextPos.clone().sub(loopExit).normalize();
+          // No point after, just use direction from loop exit to target
+          legacyTangent = targetPos.clone().sub(loopExit).normalize();
         }
         
-        // Cubic Hermite interpolation between loopExit and nextPos
-        // P(t) = (2t³ - 3t² + 1)P0 + (t³ - 2t² + t)T0 + (-2t³ + 3t²)P1 + (t³ - t²)T1
-        const distance = loopExit.distanceTo(nextPos);
-        const tangentScale = distance * 0.5; // Scale tangents by half the distance
+        // Cubic Hermite interpolation between loopExit and targetPos
+        const distance = loopExit.distanceTo(targetPos);
+        const tangentScale = distance * 0.4; // Slightly reduced for smoother curve
         
         const hermite = (t: number): THREE.Vector3 => {
           const t2 = t * t;
@@ -234,30 +239,38 @@ export const useRollerCoaster = create<RollerCoasterState>((set, get) => ({
           return new THREE.Vector3()
             .addScaledVector(loopExit, h00)
             .addScaledVector(exitTangent, h10 * tangentScale)
-            .addScaledVector(nextPos, h01)
+            .addScaledVector(targetPos, h01)
             .addScaledVector(legacyTangent, h11 * tangentScale);
         };
         
-        // Sample 2 points along the Hermite curve
+        // Sample 3 points along the Hermite curve for smoother transition
         transitionPoints.push({
           id: `point-${++pointCounter}`,
-          position: hermite(0.33),
+          position: hermite(0.25),
           tilt: 0
         });
         
         transitionPoints.push({
           id: `point-${++pointCounter}`,
-          position: hermite(0.66),
+          position: hermite(0.5),
+          tilt: 0
+        });
+        
+        transitionPoints.push({
+          id: `point-${++pointCounter}`,
+          position: hermite(0.75),
           tilt: 0
         });
       }
       
-      // Combine: original up to entry + loop + transitions + original remainder (unchanged)
+      // Combine: original up to entry + loop + transitions + skip next point (to avoid S-curve) + rest
+      // If nextNextPoint exists, skip pointIndex+1 (nextPoint) to avoid clustering
+      const skipCount = nextNextPoint ? 2 : 1;
       const newTrackPoints = [
         ...state.trackPoints.slice(0, pointIndex + 1),
         ...loopPoints,
         ...transitionPoints,
-        ...state.trackPoints.slice(pointIndex + 1)
+        ...state.trackPoints.slice(pointIndex + skipCount)
       ];
       
       return { trackPoints: newTrackPoints };
