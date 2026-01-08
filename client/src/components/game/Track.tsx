@@ -152,6 +152,19 @@ export function Track() {
         
         const right = new THREE.Vector3().crossVectors(forward, entryUp).normalize();
         
+        // Add a connecting sample at the loop entry point to bridge any gap
+        // This ensures the track connects smoothly to the loop
+        if (pointIdx > 0) {
+          const entryNormal = new THREE.Vector3().crossVectors(forward, prevUp).normalize();
+          railData.push({
+            point: entryPos.clone(),
+            tangent: forward.clone(),
+            normal: entryNormal,
+            up: prevUp.clone(),
+            tilt: 0
+          });
+        }
+        
         const rollFrame: BarrelRollFrame = {
           entryPos,
           forward,
